@@ -675,18 +675,27 @@ async function fetchBalances(pubkey) {
   state.tokenBalance = null;
   if (TOKEN_MINT) {
     try {
-      const tokenAccounts = await rpc("getTokenAccountsByOwner", [
-        pubkey,
-        { mint: TOKEN_MINT },
-        { encoding: "jsonParsed", commitment: "confirmed" },
-      ]);
-      const accounts = tokenAccounts?.value ?? [];
-      if (accounts.length > 0) {
-        const info = accounts[0].account.data.parsed.info.tokenAmount;
-        state.tokenBalance = parseFloat(info.uiAmountString);
-      } else {
-        state.tokenBalance = 0;
+      // Query both classic SPL and Token-2022 program (PENGU uses Token-2022)
+      const TOKEN_PROGRAMS = [
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",  // SPL Token
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",  // Token-2022
+      ];
+      let found = false;
+      for (const programId of TOKEN_PROGRAMS) {
+        const tokenAccounts = await rpc("getTokenAccountsByOwner", [
+          pubkey,
+          { mint: TOKEN_MINT },
+          { encoding: "jsonParsed", commitment: "confirmed", programId },
+        ]);
+        const accounts = tokenAccounts?.value ?? [];
+        if (accounts.length > 0) {
+          const info = accounts[0].account.data.parsed.info.tokenAmount;
+          state.tokenBalance = parseFloat(info.uiAmountString);
+          found = true;
+          break;
+        }
       }
+      if (!found) state.tokenBalance = 0;
     } catch (e) {
       console.warn("Token balance fetch failed:", e.message);
       state.tokenBalance = 0;
@@ -901,7 +910,8 @@ async function handleSubmit() {
 
       const { Connection, PublicKey, Transaction } = solanaWeb3;
       const connection = new Connection(RPC_ENDPOINT, "confirmed");
-      const SPL_TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+      // PENGU is Token-2022; use Token-2022 program for transfer
+      const SPL_TOKEN_PROGRAM = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
       const ASSOCIATED_TOKEN_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1brs");
       const mintPubkey    = new PublicKey(TOKEN_MINT);
       const senderPubkey  = new PublicKey(state.publicKey);
