@@ -12,6 +12,10 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22black%22/><text x=%2250%22 y=%2266%22 font-size=%2255%22 fill=%22%2334d399%22 text-anchor=%22middle%22 font-family=%22monospace%22>&gt;</text></svg>" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- Solana Web3 + Wallet Adapter (UMD builds from CDN) -->
+<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+
 <style>
   :root{
     --bg:#000000;
@@ -131,6 +135,7 @@
     font-size:13px;text-transform:uppercase;letter-spacing:0.15em;
   }
   .submit-btn:hover{background:#6ee7b7;}
+  .submit-btn:disabled{background:#3f3f46;color:#71717a;cursor:not-allowed;}
 
   .claim-box{border:1px solid var(--border);background:#000;border-radius:12px;padding:28px;text-align:center;}
   .claim-box .lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:var(--muted);}
@@ -164,9 +169,69 @@
   footer .links a:hover{color:#d4d4d8;}
 
   .icon{display:inline-block;vertical-align:middle;}
+
+  /* ── Wallet Modal ── */
+  .modal-backdrop{
+    display:none;position:fixed;inset:0;z-index:100;
+    background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);
+    align-items:center;justify-content:center;
+  }
+  .modal-backdrop.open{display:flex;}
+  .modal{
+    background:#0a0a0c;border:1px solid #27272a;border-radius:20px;
+    padding:28px;width:min(400px,92vw);
+  }
+  .modal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  .modal-title{font-size:16px;font-weight:500;color:#fafafa;}
+  .modal-close{background:transparent;border:none;color:#71717a;font-size:22px;line-height:1;padding:0 4px;}
+  .modal-close:hover{color:#fafafa;}
+  .wallet-list{display:flex;flex-direction:column;gap:8px;}
+  .wallet-item{
+    display:flex;align-items:center;gap:14px;
+    border:1px solid #27272a;border-radius:12px;padding:14px 16px;
+    background:transparent;color:#e4e4e7;font-size:14px;
+    transition:all .15s;
+  }
+  .wallet-item:hover{border-color:rgba(52,211,153,0.5);background:rgba(52,211,153,0.05);}
+  .wallet-item img,.wallet-icon{width:32px;height:32px;border-radius:8px;object-fit:contain;}
+  .wallet-item .wname{font-weight:500;}
+  .wallet-item .wstatus{margin-left:auto;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.1em;}
+  .wallet-item .wstatus.detected{color:#6ee7b7;}
+  .modal-footer{margin-top:16px;font-size:12px;color:var(--muted);text-align:center;}
+  .modal-footer a{color:#a78bfa;text-decoration:underline;}
+
+  /* toast */
+  #toast{
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:#18181b;border:1px solid #3f3f46;border-radius:10px;
+    padding:12px 20px;font-size:13px;color:#fafafa;
+    transition:transform .3s ease;z-index:200;white-space:nowrap;
+  }
+  #toast.show{transform:translateX(-50%) translateY(0);}
+  #toast.err{border-color:rgba(239,68,68,0.5);color:#fca5a5;}
+  #toast.ok{border-color:rgba(52,211,153,0.5);color:#6ee7b7;}
 </style>
 </head>
 <body>
+
+<!-- ── Wallet Picker Modal ── -->
+<div class="modal-backdrop" id="walletModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title display">Connect a wallet</span>
+      <button class="modal-close mono" onclick="closeModal()">✕</button>
+    </div>
+    <div class="wallet-list" id="walletList">
+      <!-- populated by JS -->
+    </div>
+    <div class="modal-footer mono">
+      New to Solana? <a href="https://phantom.app" target="_blank" rel="noopener">Get Phantom →</a>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="mono"></div>
 
 <header>
   <div class="inner">
@@ -179,7 +244,7 @@
       <a href="#position">Position</a>
       <a href="#info">Protocol</a>
     </nav>
-    <button class="btn-connect mono" id="connectBtn" onclick="connectWallet()">
+    <button class="btn-connect mono" id="connectBtn" onclick="openWalletModal()">
       <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="14" rx="2"/><path d="M16 12h.01"/><path d="M2 10h20"/></svg>
       <span id="connectLabel">Connect Wallet</span>
     </button>
@@ -215,7 +280,7 @@
       <div class="field">
         <div class="field-top mono">
           <span>Amount</span>
-          <span id="balanceLabel">Balance: 4,250.75 $TOKEN</span>
+          <span id="balanceLabel">Balance: — $TOKEN</span>
         </div>
         <div class="field-row">
           <input type="number" inputmode="decimal" placeholder="0.00" id="amountInput" oninput="recalc()" />
@@ -302,87 +367,313 @@
 </footer>
 
 <script>
-  // ---- Config: swap these for your real token + on-chain values ----
-  const TOKEN_SYMBOL = "$TOKEN";
-  const MOCK_BALANCE = 4250.75;
-  const MOCK_STAKED = 1800;
-  const LOCK_TIERS = [
-    { id: "flex", label: "Flexible", days: 0,   apy: 18 },
-    { id: "30d",  label: "30 Days",  days: 30,  apy: 28 },
-    { id: "90d",  label: "90 Days",  days: 90,  apy: 38 },
-    { id: "180d", label: "180 Days", days: 180, apy: 52 },
-  ];
+// ── Config ──────────────────────────────────────────────
+const TOKEN_SYMBOL = "$TOKEN";
+const MOCK_STAKED  = 1800;
+const LOCK_TIERS   = [
+  { id: "flex", label: "Flexible", days: 0,   apy: 18 },
+  { id: "30d",  label: "30 Days",  days: 30,  apy: 28 },
+  { id: "90d",  label: "90 Days",  days: 90,  apy: 38 },
+  { id: "180d", label: "180 Days", days: 180, apy: 52 },
+];
+// ── Helius RPC (real data) ───────────────────────────────
+const HELIUS_API_KEY = "88e8f971-5b5a-43b0-a17a-e158a39b7340";
+const RPC_ENDPOINT   = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
 
-  let state = { connected: false, tab: "stake", tier: "flex" };
+// Your SPL token mint — replace with the real mint address
+// Leave null to show SOL balance only until you set this
+const TOKEN_MINT = null; // e.g. "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
 
-  // Ticker
-  const stats = [
-    "TVL $18.4M","STAKERS 6,204",`BASE APY ${LOCK_TIERS[0].apy}%`,`MAX APY ${LOCK_TIERS[3].apy}%`,
-    `TOTAL STAKED 9.1M ${TOKEN_SYMBOL}`,"REWARDS DISTRIBUTED $2.7M","NEXT EPOCH 03:41:12",
-  ];
-  document.getElementById("tickerTrack").innerHTML = [...stats, ...stats]
-    .map(s => `<span><span class="dot">●</span>${s}</span>`).join("");
+// ── Supported wallets ────────────────────────────────────
+// Each entry describes how to detect the wallet in window
+const WALLETS = [
+  {
+    name: "Phantom",
+    icon: "https://raw.githubusercontent.com/solana-labs/wallet-adapter/master/packages/wallets/phantom/icon.svg",
+    detect: () => window.phantom?.solana,
+    get provider() { return window.phantom?.solana; },
+  },
+  {
+    name: "Solflare",
+    icon: "https://raw.githubusercontent.com/solana-labs/wallet-adapter/master/packages/wallets/solflare/icon.svg",
+    detect: () => window.solflare,
+    get provider() { return window.solflare; },
+  },
+  {
+    name: "Backpack",
+    icon: "https://raw.githubusercontent.com/coral-xyz/backpack/master/assets/backpack.png",
+    detect: () => window.backpack?.solana,
+    get provider() { return window.backpack?.solana; },
+  },
+  {
+    name: "Brave Wallet",
+    icon: "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%23ff6000'/><text x='50' y='72' font-size='62' text-anchor='middle' fill='white'>B</text></svg>",
+    detect: () => window.braveSolana,
+    get provider() { return window.braveSolana; },
+  },
+  {
+    name: "Coinbase Wallet",
+    icon: "https://raw.githubusercontent.com/solana-labs/wallet-adapter/master/packages/wallets/coinbase/icon.svg",
+    detect: () => window.coinbaseSolana,
+    get provider() { return window.coinbaseSolana; },
+  },
+];
 
-  // Tiers
-  function renderTiers(){
-    const el = document.getElementById("tiers");
-    el.innerHTML = LOCK_TIERS.map(t => `
-      <button class="tier ${t.id===state.tier?'active':''}" onclick="selectTier('${t.id}')">
-        <div class="apy mono">${t.apy}%</div>
-        <div class="lbl">${t.label}</div>
-      </button>`).join("");
-  }
-  function selectTier(id){ state.tier = id; renderTiers(); recalc(); }
+// ── State ────────────────────────────────────────────────
+let state = {
+  connected: false,
+  publicKey: null,
+  provider: null,
+  solBalance: 0,
+  tab: "stake",
+  tier: "flex",
+};
 
-  function setTab(tab){
-    state.tab = tab;
-    document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-    const isClaim = tab === "claim";
-    document.getElementById("stakeUnstakeView").style.display = isClaim ? "none" : "flex";
-    document.getElementById("claimView").style.display = isClaim ? "flex" : "none";
-    document.getElementById("tierBlock").style.display = tab === "stake" ? "block" : "none";
-    document.getElementById("balanceLabel").textContent =
-      `Balance: ${(tab==='stake'?MOCK_BALANCE:MOCK_STAKED).toLocaleString()} ${TOKEN_SYMBOL}`;
-    if(!isClaim){
-      document.getElementById("submitBtn").textContent = state.connected
-        ? (tab==='stake' ? `Stake ${TOKEN_SYMBOL}` : `Unstake ${TOKEN_SYMBOL}`)
-        : "Connect Wallet";
+// ── Toast ────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = "") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = "mono show " + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = "mono"; }, 3200);
+}
+
+// ── Modal ────────────────────────────────────────────────
+function openWalletModal() {
+  if (state.connected) { disconnectWallet(); return; }
+  buildWalletList();
+  document.getElementById("walletModal").classList.add("open");
+}
+function closeModal() {
+  document.getElementById("walletModal").classList.remove("open");
+}
+document.getElementById("walletModal").addEventListener("click", e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+function buildWalletList() {
+  const list = document.getElementById("walletList");
+  list.innerHTML = WALLETS.map((w, i) => {
+    const detected = !!w.detect();
+    return `
+      <button class="wallet-item" onclick="connectWallet(${i})">
+        <img src="${w.icon}" class="wallet-icon" alt="${w.name}" onerror="this.style.display='none'">
+        <span class="wname">${w.name}</span>
+        <span class="wstatus ${detected ? 'detected' : ''}">${detected ? 'Detected' : 'Install'}</span>
+      </button>`;
+  }).join("");
+}
+
+// ── RPC helper ──────────────────────────────────────────
+async function rpc(method, params) {
+  const res = await fetch(RPC_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(json.error.message);
+  return json.result;
+}
+
+// ── Fetch real balances via Helius ───────────────────────
+async function fetchBalances(pubkey) {
+  // Always fetch SOL balance
+  const solResult = await rpc("getBalance", [pubkey, { commitment: "confirmed" }]);
+  state.solBalance = (solResult?.value ?? 0) / 1e9;
+
+  // Fetch SPL token balance if a mint is configured
+  state.tokenBalance = null;
+  if (TOKEN_MINT) {
+    try {
+      const tokenAccounts = await rpc("getTokenAccountsByOwner", [
+        pubkey,
+        { mint: TOKEN_MINT },
+        { encoding: "jsonParsed", commitment: "confirmed" },
+      ]);
+      const accounts = tokenAccounts?.value ?? [];
+      if (accounts.length > 0) {
+        const info = accounts[0].account.data.parsed.info.tokenAmount;
+        state.tokenBalance = parseFloat(info.uiAmountString);
+      } else {
+        state.tokenBalance = 0;
+      }
+    } catch (e) {
+      console.warn("Token balance fetch failed:", e.message);
+      state.tokenBalance = 0;
     }
-    recalc();
+  }
+}
+
+// ── Connect ──────────────────────────────────────────────
+async function connectWallet(walletIndex) {
+  const wallet = WALLETS[walletIndex];
+  const provider = wallet.provider;
+
+  if (!provider) {
+    const urls = {
+      Phantom: "https://phantom.app",
+      Solflare: "https://solflare.com",
+      Backpack: "https://backpack.app",
+      "Coinbase Wallet": "https://www.coinbase.com/wallet",
+    };
+    window.open(urls[wallet.name] || "#", "_blank", "noopener");
+    closeModal();
+    showToast(`Install ${wallet.name} to continue`, "err");
+    return;
   }
 
-  function setMax(){
-    const bal = state.tab === "stake" ? MOCK_BALANCE : MOCK_STAKED;
-    document.getElementById("amountInput").value = bal;
-    recalc();
-  }
+  closeModal();
+  showToast("Connecting…");
 
-  function recalc(){
-    const amount = parseFloat(document.getElementById("amountInput").value) || 0;
-    const tier = LOCK_TIERS.find(t => t.id === state.tier) || LOCK_TIERS[0];
-    const days = tier.days || 30;
-    const reward = amount * (tier.apy/100) * (days/365);
-    document.getElementById("estReward").textContent = `+${reward.toFixed(3)} ${TOKEN_SYMBOL}`;
-  }
+  try {
+    const resp = await provider.connect();
+    // Phantom returns { publicKey }, Solflare/others expose provider.publicKey directly
+    const pubkey = (resp?.publicKey ?? provider.publicKey).toString();
 
-  function connectWallet(){
     state.connected = true;
-    document.getElementById("connectBtn").classList.add("connected");
-    document.getElementById("connectLabel").textContent = "7xKX...9pQz";
-    document.getElementById("position").classList.add("show");
-    setTab(state.tab);
-    document.getElementById("claimBtn").textContent = "Claim Rewards";
-  }
+    state.publicKey = pubkey;
+    state.provider  = provider;
 
-  function handleSubmit(){
-    if(!state.connected){ connectWallet(); return; }
-    // TODO: wire up real stake/unstake/claim transaction here
-    alert("Wire this button to your program's stake/unstake/claim instruction.");
-  }
+    // Fetch real on-chain balances from Helius
+    showToast("Fetching balances…");
+    try {
+      await fetchBalances(pubkey);
+    } catch (e) {
+      console.warn("Balance fetch error:", e.message);
+    }
 
-  renderTiers();
-  setTab("stake");
+    onConnected();
+    showToast("Wallet connected ✓", "ok");
+
+    // Wallet events
+    provider.on?.("disconnect", () => {
+      onDisconnected();
+      showToast("Wallet disconnected");
+    });
+    provider.on?.("accountChanged", async (pk) => {
+      if (pk) {
+        state.publicKey = pk.toString();
+        document.getElementById("connectLabel").textContent = shortAddr(state.publicKey);
+        await fetchBalances(state.publicKey).catch(() => {});
+        updateBalanceLabel();
+        showToast("Account switched");
+      } else {
+        disconnectWallet();
+      }
+    });
+
+  } catch (err) {
+    console.error("Connect error:", err);
+    const msg = (err?.message ?? "").toLowerCase().includes("user rejected")
+      ? "Connection cancelled"
+      : `Connection failed: ${err?.message ?? "unknown error"}`;
+    showToast(msg, "err");
+  }
+}
+
+async function disconnectWallet() {
+  try { await state.provider?.disconnect?.(); } catch (_) {}
+  onDisconnected();
+  showToast("Disconnected");
+}
+
+function updateBalanceLabel() {
+  if (TOKEN_MINT && state.tokenBalance !== null) {
+    document.getElementById("balanceLabel").textContent =
+      `Balance: ${state.tokenBalance.toLocaleString(undefined, {maximumFractionDigits: 4})} ${TOKEN_SYMBOL}`;
+  } else {
+    document.getElementById("balanceLabel").textContent =
+      `SOL: ${state.solBalance.toFixed(4)} SOL`;
+  }
+}
+
+function onConnected() {
+  document.getElementById("connectBtn").classList.add("connected");
+  document.getElementById("connectLabel").textContent = shortAddr(state.publicKey);
+  document.getElementById("position").classList.add("show");
+  document.getElementById("claimBtn").textContent = "Claim Rewards";
+  updateBalanceLabel();
+  setTab(state.tab);
+}
+
+function onDisconnected() {
+  state.connected = false;
+  state.publicKey = null;
+  state.provider  = null;
+  document.getElementById("connectBtn").classList.remove("connected");
+  document.getElementById("connectLabel").textContent = "Connect Wallet";
+  document.getElementById("position").classList.remove("show");
+  document.getElementById("balanceLabel").textContent = `Balance: — ${TOKEN_SYMBOL}`;
+  setTab(state.tab);
+}
+
+function shortAddr(addr) {
+  return addr.slice(0, 4) + "…" + addr.slice(-4);
+}
+
+// ── UI helpers ───────────────────────────────────────────
+const stats = [
+  "TVL $18.4M","STAKERS 6,204",`BASE APY ${LOCK_TIERS[0].apy}%`,`MAX APY ${LOCK_TIERS[3].apy}%`,
+  `TOTAL STAKED 9.1M ${TOKEN_SYMBOL}`,"REWARDS DISTRIBUTED $2.7M","NEXT EPOCH 03:41:12",
+];
+document.getElementById("tickerTrack").innerHTML = [...stats, ...stats]
+  .map(s => `<span><span class="dot">●</span>${s}</span>`).join("");
+
+function renderTiers() {
+  const el = document.getElementById("tiers");
+  el.innerHTML = LOCK_TIERS.map(t => `
+    <button class="tier ${t.id===state.tier?'active':''}" onclick="selectTier('${t.id}')">
+      <div class="apy mono">${t.apy}%</div>
+      <div class="lbl">${t.label}</div>
+    </button>`).join("");
+}
+function selectTier(id) { state.tier = id; renderTiers(); recalc(); }
+
+function setTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  const isClaim = tab === "claim";
+  document.getElementById("stakeUnstakeView").style.display = isClaim ? "none" : "flex";
+  document.getElementById("claimView").style.display        = isClaim ? "flex" : "none";
+  document.getElementById("tierBlock").style.display        = tab === "stake" ? "block" : "none";
+  if (!isClaim) {
+    document.getElementById("submitBtn").textContent = state.connected
+      ? (tab === "stake" ? `Stake ${TOKEN_SYMBOL}` : `Unstake ${TOKEN_SYMBOL}`)
+      : "Connect Wallet";
+  }
+  recalc();
+}
+
+function setMax() {
+  let bal = 0;
+  if (state.tab === "stake") {
+    // Use real token balance if available, else SOL
+    bal = (TOKEN_MINT && state.tokenBalance !== null) ? state.tokenBalance : state.solBalance;
+  } else {
+    bal = MOCK_STAKED; // replace with real staked amount from your program
+  }
+  document.getElementById("amountInput").value = bal || 0;
+  recalc();
+}
+
+function recalc() {
+  const amount = parseFloat(document.getElementById("amountInput").value) || 0;
+  const tier   = LOCK_TIERS.find(t => t.id === state.tier) || LOCK_TIERS[0];
+  const days   = tier.days || 30;
+  const reward = amount * (tier.apy / 100) * (days / 365);
+  document.getElementById("estReward").textContent = `+${reward.toFixed(3)} ${TOKEN_SYMBOL}`;
+}
+
+function handleSubmit() {
+  if (!state.connected) { openWalletModal(); return; }
+  // TODO: wire up real stake / unstake / claim instructions here
+  showToast("Wire this to your program instruction", "err");
+}
+
+renderTiers();
+setTab("stake");
 </script>
-
 </body>
 </html>
