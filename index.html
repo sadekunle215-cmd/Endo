@@ -545,6 +545,7 @@ const TOKEN_SYMBOL = "$PENGU";
 const TOKEN_DECIMALS = 6;
 const TOKEN_MINT = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
 const STAKING_PROGRAM_ID = null;     // your deployed program address
+const MULTISIG_VAULT = "EGkjjBatgZoepoXM2o3xEQxrdp3GXt6GFXfpXxQCvW1u";
 
 const LOCK_TIERS = [
   { id: "30d",  label: "30d",  days: 30,  apy: 10 },
@@ -896,11 +897,86 @@ async function handleSubmit() {
 
   try {
     if (state.tab === "stake") {
-      // TODO: Build and send stake instruction to STAKING_PROGRAM_ID
-      // const tx = await buildStakeTransaction(state.publicKey, amount, state.tier);
-      // const sig = await state.provider.signAndSendTransaction(tx);
-      // await confirmTransaction(sig);
-      showToast("Program not yet configured", "err");
+      showToast("Building transaction…");
+
+      const { Connection, PublicKey, Transaction } = solanaWeb3;
+      const connection = new Connection(RPC_ENDPOINT, "confirmed");
+      const SPL_TOKEN_PROGRAM = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+      const ASSOCIATED_TOKEN_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1brs");
+      const mintPubkey    = new PublicKey(TOKEN_MINT);
+      const senderPubkey  = new PublicKey(state.publicKey);
+      const vaultPubkey   = new PublicKey(MULTISIG_VAULT);
+
+      // Derive sender's ATA
+      const [senderATA] = await PublicKey.findProgramAddress(
+        [senderPubkey.toBuffer(), SPL_TOKEN_PROGRAM.toBuffer(), mintPubkey.toBuffer()],
+        ASSOCIATED_TOKEN_PROGRAM
+      );
+
+      // Derive vault's ATA
+      const [vaultATA] = await PublicKey.findProgramAddress(
+        [vaultPubkey.toBuffer(), SPL_TOKEN_PROGRAM.toBuffer(), mintPubkey.toBuffer()],
+        ASSOCIATED_TOKEN_PROGRAM
+      );
+
+      // Check vault ATA exists; if not, create it
+      const vaultATAInfo = await connection.getAccountInfo(vaultATA);
+      const tx = new Transaction();
+
+      if (!vaultATAInfo) {
+        // Create associated token account for vault
+        const createATAIx = {
+          keys: [
+            { pubkey: senderPubkey, isSigner: true, isWritable: true },
+            { pubkey: vaultATA,     isSigner: false, isWritable: true },
+            { pubkey: vaultPubkey,  isSigner: false, isWritable: false },
+            { pubkey: mintPubkey,   isSigner: false, isWritable: false },
+            { pubkey: new PublicKey("11111111111111111111111111111111"), isSigner: false, isWritable: false },
+            { pubkey: SPL_TOKEN_PROGRAM, isSigner: false, isWritable: false },
+            { pubkey: new PublicKey("SysvarRent111111111111111111111111111111111"), isSigner: false, isWritable: false },
+          ],
+          programId: ASSOCIATED_TOKEN_PROGRAM,
+          data: Buffer.alloc(0),
+        };
+        tx.add(createATAIx);
+      }
+
+      // Build SPL transfer instruction
+      const rawAmount = BigInt(Math.round(amount * Math.pow(10, TOKEN_DECIMALS)));
+      const transferData = Buffer.alloc(9);
+      transferData.writeUInt8(3, 0); // Transfer instruction index
+      transferData.writeBigUInt64LE(rawAmount, 1);
+
+      const transferIx = {
+        keys: [
+          { pubkey: senderATA,    isSigner: false, isWritable: true },
+          { pubkey: vaultATA,     isSigner: false, isWritable: true },
+          { pubkey: senderPubkey, isSigner: true,  isWritable: false },
+        ],
+        programId: SPL_TOKEN_PROGRAM,
+        data: transferData,
+      };
+      tx.add(transferIx);
+
+      const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = senderPubkey;
+
+      showToast("Approve in wallet…");
+      const signed = await state.provider.signTransaction(tx);
+      const sig = await connection.sendRawTransaction(signed.serialize());
+
+      showToast("Confirming…");
+      await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
+
+      // Update local balance
+      state.position.staked += amount;
+      state.tokenBalance = Math.max(0, (state.tokenBalance ?? 0) - amount);
+      updateBalanceLabel();
+      updatePositionUI();
+      document.getElementById("amountInput").value = "";
+      recalc();
+      showToast(`Staked ${amount.toLocaleString()} ${TOKEN_SYMBOL} ✓`, "ok");
 
     } else if (state.tab === "unstake") {
       // TODO: Build and send unstake instruction
