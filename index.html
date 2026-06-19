@@ -4,9 +4,9 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>stake_ — PENGU Staking Terminal</title>
-<meta name="description" content="Stake PENGU, pick your lock term, watch the yield compound. Non-custodial staking on Solana." />
+<meta name="description" content="Stake PENGU, pick your lock term, watch the yield compound. Custodial staking — deposits are held and processed manually by the operator." />
 <meta property="og:title" content="stake_ — PENGU Staking Terminal" />
-<meta property="og:description" content="Stake PENGU, pick your lock term, watch the yield compound." />
+<meta property="og:description" content="Stake PENGU, pick your lock term. Custodial — deposits and payouts are processed manually by the operator." />
 <meta property="og:type" content="website" />
 <meta name="theme-color" content="#000000" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22black%22/><text x=%2250%22 y=%2266%22 font-size=%2255%22 fill=%22%2334d399%22 text-anchor=%22middle%22 font-family=%22monospace%22>&gt;</text></svg>" />
@@ -14,6 +14,34 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
 <script src="https://unpkg.com/@solana/spl-token@0.3.11/lib/index.iife.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ⚠️ Fill in with your real Firebase project config (Project settings → General → Your apps)
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID",
+  };
+
+  const fbApp = initializeApp(firebaseConfig);
+  const auth = getAuth(fbApp);
+  const db = getFirestore(fbApp);
+
+  // Expose a small bridge so the non-module script below can use Firebase
+  window.firebaseBridge = { auth, db, doc, setDoc, addDoc, collection, onSnapshot, serverTimestamp };
+
+  signInAnonymously(auth).catch(err => console.error("Anon auth failed:", err));
+  onAuthStateChanged(auth, user => {
+    window.firebaseBridge.uid = user ? user.uid : null;
+    window.dispatchEvent(new CustomEvent("fb-auth-ready", { detail: { uid: user?.uid ?? null } }));
+  });
+</script>
 
 <style>
   :root{
@@ -121,6 +149,12 @@
     transition:all .18s;box-shadow:0 0 0 0 rgba(52,211,153,0);
   }
   .cta:hover{background:#6ee7b7;box-shadow:0 0 24px rgba(52,211,153,0.3);}
+
+  .disclosure-banner{
+    margin-top:24px;text-align:left;font-size:11px;line-height:1.6;
+    color:#fbbf24;border:1px solid rgba(251,191,36,0.3);background:rgba(251,191,36,0.06);
+    border-radius:10px;padding:12px 14px;
+  }
 
   /* ── Stake Section ── */
   .stake-section{max-width:440px;margin:0 auto;padding:8px 20px 32px;}
@@ -374,10 +408,13 @@
 <section class="hero">
   <span class="eyebrow mono">
     <span class="dot">●</span>
-    Solana · PENGU Staking
+    Solana · PENGU Staking · Custodial
   </span>
   <h1 class="display">Stake $PENGU.<br>Earn while you sleep.</h1>
-  <p class="hero-sub">Lock your tokens, choose your term, watch the yield compound. Non-custodial, no middlemen — just on-chain math.</p>
+  <p class="hero-sub">Lock your tokens, choose your term, watch the yield compound. <strong>Custodial service</strong> — deposits are sent to an operator-controlled wallet and unstaking/reward payouts are reviewed and processed manually, not by an on-chain program.</p>
+  <div class="disclosure-banner mono">
+    ⚠ This is a custodial staking service, not a non-custodial smart contract. Your tokens are held by the operator. Withdrawals and rewards are paid out manually and are not guaranteed by code. Only stake what you can afford to lose.
+  </div>
   <div class="apy-block">
     <div class="apy-num mono" id="heroApy">45%</div>
     <div class="apy-sup mono">max APY</div>
@@ -499,8 +536,8 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
         <div>
-          <div class="ititle mono">Non-custodial</div>
-          <p>Your tokens never leave your control. The program holds funds in a permissionless on-chain vault.</p>
+          <div class="ititle mono">Custodial — manually processed</div>
+          <p>Deposits are sent to an operator-controlled wallet. There is no on-chain staking program. Unstaking and reward payouts are reviewed and sent manually by the operator, typically within [your stated SLA, e.g. 24–48h].</p>
         </div>
       </div>
     </div>
@@ -510,8 +547,8 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
         </div>
         <div>
-          <div class="ititle mono">Auto-compound</div>
-          <p>Rewards compound every epoch automatically. No manual claiming required to maximise yield.</p>
+          <div class="ititle mono">Reward accrual</div>
+          <p>Rewards accrue based on your locked amount and tier APY. Payout is sent manually by the operator when you submit a claim request — it is not automated on-chain.</p>
         </div>
       </div>
     </div>
@@ -611,7 +648,55 @@ const state = {
   tier: "30d",
 };
 
-// ── Toast ─────────────────────────────────────────────────
+// ── Firebase helpers ──────────────────────────────────────
+let fbReady = false;
+let fbUnsubPosition = null;
+window.addEventListener("fb-auth-ready", () => { fbReady = true; });
+
+async function waitForFirebase(timeoutMs = 8000) {
+  if (fbReady) return true;
+  return new Promise(resolve => {
+    const t = setTimeout(() => resolve(fbReady), timeoutMs);
+    window.addEventListener("fb-auth-ready", () => { clearTimeout(t); resolve(true); }, { once: true });
+  });
+}
+
+// Creates a manual-processing request record. The operator reviews these
+// in the Firebase console / admin tooling and updates status by hand.
+async function recordRequest(type, payload) {
+  const { db, addDoc, collection, serverTimestamp } = window.firebaseBridge;
+  return addDoc(collection(db, "stakeRequests"), {
+    type,                       // "stake" | "unstake" | "claim"
+    wallet: state.publicKey,
+    status: "pending",          // operator flips to "processed" manually
+    createdAt: serverTimestamp(),
+    ...payload,
+  });
+}
+
+// Subscribes to the manually-maintained position doc for this wallet.
+// The operator writes/updates positions/{wallet} by hand to reflect
+// what's actually been staked/owed.
+function subscribeToPosition(wallet) {
+  if (fbUnsubPosition) { fbUnsubPosition(); fbUnsubPosition = null; }
+  const { db, doc, onSnapshot } = window.firebaseBridge;
+  fbUnsubPosition = onSnapshot(doc(db, "positions", wallet), snap => {
+    if (snap.exists()) {
+      const d = snap.data();
+      state.position = {
+        staked: d.staked ?? 0,
+        pending: d.pending ?? 0,
+        lockStart: d.lockStart ?? null,
+        lockDuration: d.lockDuration ?? 0,
+      };
+    } else {
+      state.position = { staked: 0, pending: 0, lockStart: null, lockDuration: 0 };
+    }
+    updatePositionUI();
+  }, err => console.error("Position listener error:", err));
+}
+
+
 let _toastTimer;
 function showToast(msg, type = "") {
   const t = document.getElementById("toast");
@@ -816,9 +901,11 @@ function onConnected() {
   document.getElementById("connectBtn").classList.add("connected");
   document.getElementById("connectLabel").textContent = shortAddr(state.publicKey);
   document.getElementById("position").classList.add("show");
+
   updateBalanceLabel();
   updatePositionUI();
   setTab(state.tab);
+  subscribeToPosition(state.publicKey);
 }
 
 function onDisconnected() {
@@ -828,6 +915,7 @@ function onDisconnected() {
   state.solBalance = 0;
   state.tokenBalance = null;
   state.position = { staked:0, pending:0, lockStart:null, lockDuration:0 };
+  if (fbUnsubPosition) { fbUnsubPosition(); fbUnsubPosition = null; }
   document.getElementById("connectBtn").classList.remove("connected");
   document.getElementById("connectLabel").textContent = "Connect Wallet";
   document.getElementById("position").classList.remove("show");
@@ -963,22 +1051,43 @@ async function handleSubmit() {
       showToast("Confirming…");
       await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, "confirmed");
 
-      // Update local balance
+      // Record the deposit for manual processing — the operator reviews
+      // this in Firebase and updates positions/{wallet} by hand.
+      await waitForFirebase();
+      await recordRequest("stake", {
+        amount,
+        tier: state.tier,
+        txSig: sig,
+      });
+
+      // Optimistic local UI update; the authoritative numbers come from
+      // the manually-maintained positions/{wallet} doc via subscribeToPosition.
       state.position.staked += amount;
       state.tokenBalance = Math.max(0, (state.tokenBalance ?? 0) - amount);
       updateBalanceLabel();
       updatePositionUI();
       document.getElementById("amountInput").value = "";
       recalc();
-      showToast(`Staked ${amount.toLocaleString()} ${TOKEN_SYMBOL} ✓`, "ok");
+      showToast(`Deposit sent — pending manual confirmation`, "ok");
 
     } else if (state.tab === "unstake") {
-      // TODO: Build and send unstake instruction
-      showToast("Program not yet configured", "err");
+      if (amount > state.position.staked) {
+        showToast("Amount exceeds staked balance", "err");
+      } else {
+        await waitForFirebase();
+        await recordRequest("unstake", { amount, tier: state.tier });
+        document.getElementById("amountInput").value = "";
+        showToast("Unstake request submitted — processed manually", "ok");
+      }
 
     } else if (state.tab === "claim") {
-      // TODO: Build and send claim instruction
-      showToast("Program not yet configured", "err");
+      if (state.position.pending <= 0) {
+        showToast("Nothing to claim", "err");
+      } else {
+        await waitForFirebase();
+        await recordRequest("claim", { amount: state.position.pending });
+        showToast("Claim request submitted — processed manually", "ok");
+      }
     }
   } catch (err) {
     console.error("TX error:", err);
