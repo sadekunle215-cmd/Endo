@@ -13,6 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
+<script src="https://unpkg.com/@solana/spl-token@0.3.11/lib/index.iife.min.js"></script>
 
 <style>
   :root{
@@ -909,64 +910,47 @@ async function handleSubmit() {
       showToast("Building transaction…");
 
       const { Connection, PublicKey, Transaction } = solanaWeb3;
-      const connection = new Connection(RPC_ENDPOINT, "confirmed");
-      // PENGU is Token-2022; use Token-2022 program for transfer
-      const SPL_TOKEN_PROGRAM = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
-      const ASSOCIATED_TOKEN_PROGRAM = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1brs");
-      const mintPubkey    = new PublicKey(TOKEN_MINT);
-      const senderPubkey  = new PublicKey(state.publicKey);
-      const vaultPubkey   = new PublicKey(MULTISIG_VAULT);
+      const { getOrCreateAssociatedTokenAccount, createTransferInstruction, getMint } = splToken;
 
-      // Derive sender's ATA
-      const [senderATA] = await PublicKey.findProgramAddress(
-        [senderPubkey.toBuffer(), SPL_TOKEN_PROGRAM.toBuffer(), mintPubkey.toBuffer()],
-        ASSOCIATED_TOKEN_PROGRAM
+      const connection  = new Connection(RPC_ENDPOINT, "confirmed");
+      const mintPubkey  = new PublicKey(TOKEN_MINT);
+      const senderPubkey = new PublicKey(state.publicKey);
+      const destPubkey   = new PublicKey(MULTISIG_VAULT);
+
+      // Detect token program (SPL vs Token-2022) from on-chain mint info
+      const mintInfo = await connection.getAccountInfo(mintPubkey);
+      const tokenProgramId = mintInfo
+        ? new PublicKey(mintInfo.owner)
+        : new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+
+      // Get/create sender ATA
+      const senderATA = await splToken.getAssociatedTokenAddress(
+        mintPubkey, senderPubkey, false, tokenProgramId
       );
 
-      // Derive vault's ATA
-      const [vaultATA] = await PublicKey.findProgramAddress(
-        [vaultPubkey.toBuffer(), SPL_TOKEN_PROGRAM.toBuffer(), mintPubkey.toBuffer()],
-        ASSOCIATED_TOKEN_PROGRAM
+      // Get/create destination ATA — create if missing
+      const destATA = await splToken.getAssociatedTokenAddress(
+        mintPubkey, destPubkey, false, tokenProgramId
       );
 
-      // Check vault ATA exists; if not, create it
-      const vaultATAInfo = await connection.getAccountInfo(vaultATA);
       const tx = new Transaction();
 
-      if (!vaultATAInfo) {
-        // Create associated token account for vault
-        const createATAIx = {
-          keys: [
-            { pubkey: senderPubkey, isSigner: true, isWritable: true },
-            { pubkey: vaultATA,     isSigner: false, isWritable: true },
-            { pubkey: vaultPubkey,  isSigner: false, isWritable: false },
-            { pubkey: mintPubkey,   isSigner: false, isWritable: false },
-            { pubkey: new PublicKey("11111111111111111111111111111111"), isSigner: false, isWritable: false },
-            { pubkey: SPL_TOKEN_PROGRAM, isSigner: false, isWritable: false },
-            { pubkey: new PublicKey("SysvarRent111111111111111111111111111111111"), isSigner: false, isWritable: false },
-          ],
-          programId: ASSOCIATED_TOKEN_PROGRAM,
-          data: Buffer.alloc(0),
-        };
-        tx.add(createATAIx);
+      const destATAInfo = await connection.getAccountInfo(destATA);
+      if (!destATAInfo) {
+        tx.add(
+          splToken.createAssociatedTokenAccountInstruction(
+            senderPubkey, destATA, destPubkey, mintPubkey,
+            tokenProgramId
+          )
+        );
       }
 
-      // Build SPL transfer instruction
       const rawAmount = BigInt(Math.round(amount * Math.pow(10, TOKEN_DECIMALS)));
-      const transferData = Buffer.alloc(9);
-      transferData.writeUInt8(3, 0); // Transfer instruction index
-      transferData.writeBigUInt64LE(rawAmount, 1);
-
-      const transferIx = {
-        keys: [
-          { pubkey: senderATA,    isSigner: false, isWritable: true },
-          { pubkey: vaultATA,     isSigner: false, isWritable: true },
-          { pubkey: senderPubkey, isSigner: true,  isWritable: false },
-        ],
-        programId: SPL_TOKEN_PROGRAM,
-        data: transferData,
-      };
-      tx.add(transferIx);
+      tx.add(
+        splToken.createTransferInstruction(
+          senderATA, destATA, senderPubkey, rawAmount, [], tokenProgramId
+        )
+      );
 
       const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
       tx.recentBlockhash = blockhash;
