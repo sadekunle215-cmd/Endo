@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>stake_ — SPL Staking Terminal</title>
-<meta name="description" content="Stake your SPL token, pick your lock term, watch the yield compound. Non-custodial staking on Solana." />
-<meta property="og:title" content="stake_ — SPL Staking Terminal" />
-<meta property="og:description" content="Stake your SPL token, pick your lock term, watch the yield compound." />
+<title>stake_ — PENGU Staking Terminal</title>
+<meta name="description" content="Stake PENGU, pick your lock term, watch the yield compound. Non-custodial staking on Solana." />
+<meta property="og:title" content="stake_ — PENGU Staking Terminal" />
+<meta property="og:description" content="Stake PENGU, pick your lock term, watch the yield compound." />
 <meta property="og:type" content="website" />
 <meta name="theme-color" content="#000000" />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22black%22/><text x=%2250%22 y=%2266%22 font-size=%2255%22 fill=%22%2334d399%22 text-anchor=%22middle%22 font-family=%22monospace%22>&gt;</text></svg>" />
@@ -373,9 +373,9 @@
 <section class="hero">
   <span class="eyebrow mono">
     <span class="dot">●</span>
-    Solana · SPL Staking
+    Solana · PENGU Staking
   </span>
-  <h1 class="display">Stake $TOKEN.<br>Earn while you sleep.</h1>
+  <h1 class="display">Stake $PENGU.<br>Earn while you sleep.</h1>
   <p class="hero-sub">Lock your tokens, choose your term, watch the yield compound. Non-custodial, no middlemen — just on-chain math.</p>
   <div class="apy-block">
     <div class="apy-num mono" id="heroApy">52%</div>
@@ -419,7 +419,7 @@
           <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#71717a" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           Est. reward
         </span>
-        <span class="reward-val" id="estReward">+0.000 $TOKEN</span>
+        <span class="reward-val" id="estReward">+0.000 $PENGU</span>
       </div>
 
       <button class="submit-btn mono" id="submitBtn" onclick="handleSubmit()">Connect Wallet</button>
@@ -430,7 +430,7 @@
       <div class="claim-box">
         <div class="clbl mono">Claimable rewards</div>
         <div class="cnum mono" id="claimAmount">—</div>
-        <div class="csym mono">$TOKEN</div>
+        <div class="csym mono">$PENGU</div>
       </div>
       <button class="submit-btn mono" id="claimBtn" onclick="handleSubmit()">Connect Wallet</button>
     </div>
@@ -541,9 +541,9 @@
 
 <script>
 // ── ⚙️  CONFIG — update these for your real token ────────────────────────────
-const TOKEN_SYMBOL = "$TOKEN";       // e.g. "$MYTOKEN"
-const TOKEN_DECIMALS = 6;            // your SPL token decimals
-const TOKEN_MINT = null;             // e.g. "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+const TOKEN_SYMBOL = "$PENGU";
+const TOKEN_DECIMALS = 6;
+const TOKEN_MINT = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
 const STAKING_PROGRAM_ID = null;     // your deployed program address
 
 const LOCK_TIERS = [
