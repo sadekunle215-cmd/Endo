@@ -378,7 +378,7 @@
   <h1 class="display">Stake $PENGU.<br>Earn while you sleep.</h1>
   <p class="hero-sub">Lock your tokens, choose your term, watch the yield compound. Non-custodial, no middlemen — just on-chain math.</p>
   <div class="apy-block">
-    <div class="apy-num mono" id="heroApy">52%</div>
+    <div class="apy-num mono" id="heroApy">45%</div>
     <div class="apy-sup mono">max APY</div>
   </div>
   <a href="#stake" class="cta mono">
@@ -401,7 +401,7 @@
       <div class="field">
         <div class="field-top mono">
           <span>Amount</span>
-          <span id="balanceLabel" class="field-balance" onclick="setMax()" title="Click to fill max">SOL: — SOL</span>
+          <span id="balanceLabel" class="field-balance" onclick="setMax()" title="Click to fill max">PENGU: — PENGU</span>
         </div>
         <div class="field-row">
           <input type="number" inputmode="decimal" placeholder="0.00" id="amountInput" oninput="recalc()" autocomplete="off" />
@@ -547,10 +547,10 @@ const TOKEN_MINT = "2zMMhcVQEXDtdE6vsFS7S7D5oUodfJHE8vd1gnBouauv";
 const STAKING_PROGRAM_ID = null;     // your deployed program address
 
 const LOCK_TIERS = [
-  { id: "flex", label: "Flex",    days: 0,   apy: 18 },
-  { id: "30d",  label: "30d",     days: 30,  apy: 28 },
-  { id: "90d",  label: "90d",     days: 90,  apy: 38 },
-  { id: "180d", label: "180d",    days: 180, apy: 52 },
+  { id: "30d",  label: "30d",  days: 30,  apy: 10 },
+  { id: "90d",  label: "90d",  days: 90,  apy: 15 },
+  { id: "180d", label: "180d", days: 180, apy: 25 },
+  { id: "365d", label: "365d", days: 365, apy: 45 },
 ];
 
 // Helius RPC — replace key with yours
@@ -606,7 +606,7 @@ const state = {
     lockDuration: 0,    // days
   },
   tab: "stake",
-  tier: "flex",
+  tier: "30d",
 };
 
 // ── Toast ─────────────────────────────────────────────────
@@ -765,7 +765,7 @@ function updateBalanceLabel() {
   if (TOKEN_MINT && state.tokenBalance !== null) {
     lbl.textContent = `${TOKEN_SYMBOL}: ${state.tokenBalance.toLocaleString(undefined, {maximumFractionDigits: 4})}`;
   } else {
-    lbl.textContent = `SOL: ${state.solBalance.toFixed(4)} SOL`;
+    lbl.textContent = `PENGU: ${state.solBalance.toFixed(4)} PENGU`;
   }
 }
 
@@ -820,7 +820,7 @@ function onDisconnected() {
   document.getElementById("connectBtn").classList.remove("connected");
   document.getElementById("connectLabel").textContent = "Connect Wallet";
   document.getElementById("position").classList.remove("show");
-  document.getElementById("balanceLabel").textContent = `SOL: — SOL`;
+  document.getElementById("balanceLabel").textContent = `PENGU: — PENGU`;
   setTab(state.tab);
 }
 
